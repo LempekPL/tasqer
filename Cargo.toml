@@ -13,3 +13,5 @@ dotenvy = "0.15.7"
 argon2 = "0.6.0"
 serde = "1.0.229"
 serde_json = "1.0.154"
+
+tasqer-macros = { path = "./tasqer-macros" }
