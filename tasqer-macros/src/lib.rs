@@ -15,13 +15,18 @@ fn create_router(path: LitStr, func: ItemFn, method: &str) -> TokenStream {
         .clone()
         .expect("function needs to be async");
     let input = func.sig.inputs.clone();
+    let input_types = input.iter().map(|arg| match arg {
+        syn::FnArg::Receiver(_) => panic!("methods with 'self' are not supported"),
+        syn::FnArg::Typed(pat_type) => &pat_type.ty,
+    });
 
     let ident = Ident::new(method, Span::call_site());
 
     quote! {
         #vis fn #name <S>() -> axum::Router<S>
         where
-            S: Clone + Send + Sync + 'static
+            S: Clone + Send + Sync + 'static,
+            #( #input_types: axum::extract::FromRequestParts<S>, )*
         {
             #async_sig fn handler(#input) #ret #block
             axum::Router::new().route(#path, axum::routing:: #ident (handler))
