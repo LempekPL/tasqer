@@ -216,14 +216,11 @@ pub fn routes(input: TokenStream) -> TokenStream {
     if exprs.is_empty() {
         return quote! { axum::Router::new() }.into();
     }
-    let mut iter = exprs.into_iter();
-    let first = iter.next().unwrap();
-    let merges = iter.map(|expr| {
+    let merges = exprs.into_iter().map(|expr| {
         quote! { .merge(#expr) }
     });
     let expanded = quote! {
         axum::Router::new()
-            .merge(#first)
             #(#merges)*
     };
     expanded.into()
