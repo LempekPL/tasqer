@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::__private::Span;
 use quote::quote;
 use syn::parse::Parser;
-use syn::{Ident, ItemFn, LitStr};
+use syn::{FnArg, Ident, ItemFn, LitStr, Pat, Type};
 
 fn create_router(path: LitStr, func: ItemFn, method: &str) -> TokenStream {
     let vis = func.vis.clone();
@@ -15,10 +15,21 @@ fn create_router(path: LitStr, func: ItemFn, method: &str) -> TokenStream {
         .clone()
         .expect("function needs to be async");
     let input = func.sig.inputs.clone();
-    let input_types = input.iter().map(|arg| match arg {
-        syn::FnArg::Receiver(_) => panic!("methods with 'self' are not supported"),
-        syn::FnArg::Typed(pat_type) => &pat_type.ty,
-    });
+
+    let mut state_bounds = Vec::new();
+    for arg in &input {
+        if let FnArg::Typed(pat_type) = arg
+            && let Type::Path(type_path) = &*pat_type.ty
+            && let Some(segment) = type_path.path.segments.last()
+            && segment.ident == "State"
+            && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+            && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
+        {
+            state_bounds.push(quote! {
+                #inner_ty: axum::extract::FromRef<S>
+            });
+        }
+    }
 
     let ident = Ident::new(method, Span::call_site());
 
@@ -26,10 +37,10 @@ fn create_router(path: LitStr, func: ItemFn, method: &str) -> TokenStream {
         #vis fn #name <S>() -> axum::Router<S>
         where
             S: Clone + Send + Sync + 'static,
-            #( #input_types: axum::extract::FromRequestParts<S>, )*
+            #(#state_bounds,)*
         {
             #async_sig fn handler(#input) #ret #block
-            axum::Router::new().route(#path, axum::routing:: #ident (handler))
+            axum::Router::new().route(#path, axum::routing::#ident(handler))
         }
     }
     .into()
@@ -218,9 +229,6 @@ pub fn routes(input: TokenStream) -> TokenStream {
         Ok(exprs) => exprs,
         Err(err) => return err.to_compile_error().into(),
     };
-    if exprs.is_empty() {
-        return quote! { axum::Router::new() }.into();
-    }
     let merges = exprs.into_iter().map(|expr| {
         quote! { .merge(#expr) }
     });

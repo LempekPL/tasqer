@@ -1,28 +1,30 @@
-use axum::extract::State;
-use axum::http::StatusCode;
-use axum::Router;
-use axum::routing::get;
+use crate::http::AppState;
+use axum::extract::{Path, State};
+use axum::{Json, Router};
+use serde::Deserialize;
 use sqlx::PgPool;
+use tasqer_macros::{get, routes};
 
-pub fn router() -> Router<PgPool> {
-    Router::new()
-        .route("/v1", get(using_connection_pool_extractor))
+pub fn router() -> Router<AppState> {
+    Router::new().nest("/task", routes![create_task()])
 }
 
+#[derive(Deserialize)]
+struct CreateTaskPayload {
+    title: String,
+    desc: Option<String>,
+}
 
-
-async fn using_connection_pool_extractor(
+#[get("/create")]
+pub async fn create_task(
     State(pool): State<PgPool>,
-) -> Result<String, (StatusCode, String)> {
-    sqlx::query_scalar("select 'hello world from pg'")
+    Json(data): Json<CreateTaskPayload>,
+) -> String {
+    let stri: String = sqlx::query_scalar("select 'hello world from pg'")
         .fetch_one(&pool)
         .await
-        .map_err(internal_error)
-}
-
-fn internal_error<E>(err: E) -> (StatusCode, String)
-where
-    E: std::error::Error,
-{
-    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+        .unwrap();
+    let title = stri + &data.title;
+    title
+    // "sss".to_string()
 }

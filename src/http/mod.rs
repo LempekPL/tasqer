@@ -1,8 +1,9 @@
 use anyhow::Context;
-use axum::Router;
-use axum::extract::{FromRef, Path};
+use axum::extract::{FromRef, State};
+use axum::routing::{get, post};
+use axum::{Json, Router};
 use sqlx::PgPool;
-use tasqer_macros::{get, post, routes};
+use tasqer_macros::routes;
 
 mod v1;
 
@@ -17,23 +18,10 @@ impl FromRef<AppState> for PgPool {
     }
 }
 
-#[post("/test")]
-pub async fn test2() -> &'static str {
-    "Hello, World!"
-}
-
-#[get("/test/{id}")]
-pub async fn test(Path(id): Path<u64>) -> String {
-    let id = id.to_string();
-    id
-    // "Hello, World!"
-}
-
-pub async fn run(db: PgPool) -> anyhow::Result<()> {
+pub async fn run(pool: PgPool) -> anyhow::Result<()> {
     let ap = Router::new()
-        .merge(routes![test2(), test()])
-        .nest("/v1", test())
-        .with_state(AppState { pool: db });
+        .nest("/v1", v1::router())
+        .with_state(AppState { pool });
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3010").await?;
     axum::serve(listener, ap)
