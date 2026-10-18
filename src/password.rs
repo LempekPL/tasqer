@@ -1,12 +1,13 @@
 use anyhow::{Context, anyhow};
-use tokio::task;
-
+use argon2::password_hash::phc::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash};
+use tokio::task;
 
 pub async fn hash(password: String) -> anyhow::Result<String> {
     task::spawn_blocking(move || {
+        let salt = SaltString::generate();
         Ok(Argon2::default()
-            .hash_password(password.as_bytes())
+            .hash_password_with_salt(password.as_bytes(), &salt.as_bytes())
             .map_err(|e| anyhow!(e).context("failed to hash password"))?
             .to_string())
     })

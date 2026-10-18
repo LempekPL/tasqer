@@ -1,20 +1,23 @@
-mod http;
+mod api;
+mod notifications;
 mod password;
+mod threads;
+mod util;
 
-use anyhow::Context;
-use sqlx::postgres::PgPoolOptions;
+use crate::util::{Cors, connect_db, options_handler};
+use rkt::launch;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let database_url = dotenvy::var("DATABASE_URL").context("DATABASE_URL must be set")?;
-    let db = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await
-        .context("Database connection failed")?;
-
-    sqlx::migrate!().run(&db).await?;
-
-    http::run(db).await
+#[launch]
+async fn rocket() -> _ {
+    let _log_guard = util::setup_logger();
+    let pool = connect_db().await;
+    let (tx, rx) = tokio::sync::mpsc::channel(100);
+    threads::spawn_cleanup_worker(pool.clone());
+    threads::spawn_deadline_worker(pool.clone(), tx.clone());
+    notifications::spawn_notification_sender_worker(rx);
+    rkt::build()
+        .manage(pool)
+        .attach(Cors::new())
+        .mount("/", rkt::routes![options_handler])
+        .mount("/v1", api::v1::routes())
 }
-
