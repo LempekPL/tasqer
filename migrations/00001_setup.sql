@@ -1,9 +1,11 @@
 CREATE TABLE users
 (
     id         uuid        NOT NULL DEFAULT uuidv7() UNIQUE,
-    login      text        NOT NULL UNIQUE,
+    login      varchar(32) NOT NULL UNIQUE,
     password   text        NOT NULL,
+    username   text        NOT NULL,
     admin      boolean     NOT NULL DEFAULT FALSE,
+    private    boolean     NOT NULL DEFAULT FALSE,
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
@@ -23,6 +25,7 @@ CREATE TABLE groups
 (
     id         uuid        NOT NULL DEFAULT uuidv7() UNIQUE,
     name       text        NOT NULL,
+    public     boolean     NOT NULL DEFAULT FALSE,
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
@@ -103,3 +106,15 @@ CREATE INDEX idx_task_audit_log_user_id ON task_audit_log (user_id);
 CREATE INDEX idx_task_active
     ON task (created_at)
     WHERE deleted_at IS NULL;
+
+CREATE TABLE invite_codes
+(
+    id         uuid        NOT NULL DEFAULT uuidv7() UNIQUE,
+    code       varchar(32) NOT NULL UNIQUE,
+    created_by uuid        NOT NULL,
+    used_by    uuid,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (id),
+    FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE,
+    FOREIGN KEY (used_by) REFERENCES users (id) ON DELETE SET NULL
+);

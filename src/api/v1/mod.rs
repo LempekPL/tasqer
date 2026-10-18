@@ -1,13 +1,13 @@
 mod user;
 
-use crate::api::v1::user::user_login;
+use crate::api::v1::user::{get_self, login, logout};
 use rkt::serde::json::Json;
 use rkt::{Route, State, post};
 use serde::Deserialize;
 use sqlx::PgPool;
 
 pub fn routes() -> Vec<Route> {
-    rkt::routes![user_login, create_task]
+    rkt::routes![login, get_self, logout, create_task]
 }
 
 #[derive(Deserialize)]

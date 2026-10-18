@@ -12,16 +12,14 @@ pub async fn hash(password: String) -> anyhow::Result<String> {
             .to_string())
     })
     .await
-    .context("panic in hash()")?
+    .context("panic in hash")?
 }
 
 pub async fn verify(password: String, hash: String) -> anyhow::Result<bool> {
     task::spawn_blocking(move || {
         let hash = PasswordHash::new(&hash)
-            .map_err(|e| anyhow!(e).context("BUG: password hash invalid"))?;
-
+            .map_err(|e| anyhow!(e).context("password hash invalid"))?;
         let res = Argon2::default().verify_password(password.as_bytes(), &hash);
-
         match res {
             Ok(()) => Ok(true),
             Err(password_hash::Error::PasswordInvalid) => Ok(false),
@@ -29,5 +27,5 @@ pub async fn verify(password: String, hash: String) -> anyhow::Result<bool> {
         }
     })
     .await
-    .context("panic in verify()")?
+    .context("panic in verify")?
 }
