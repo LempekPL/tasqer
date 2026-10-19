@@ -1,8 +1,7 @@
 mod admin;
+mod group;
 mod user;
 
-use crate::api::v1::admin::{create_invite, delete_user, get_users};
-use crate::api::v1::user::{get_self, login, logout, register};
 use rkt::serde::json::Json;
 use rkt::{Route, State, post};
 use serde::Deserialize;
@@ -10,13 +9,20 @@ use sqlx::PgPool;
 
 pub fn routes() -> Vec<Route> {
     rkt::routes![
-        register,
-        login,
-        get_self,
-        logout,
-        get_users,
-        delete_user,
-        create_invite,
+        user::register,
+        user::login,
+        user::get_self,
+        user::logout,
+        user::get_groups,
+        group::create_group,
+        group::get_groups,
+        group::delete_group,
+        group::join_group,
+        group::add_to_group,
+        admin::get_users,
+        admin::delete_user,
+        admin::create_invite,
+        admin::get_groups,
         create_task
     ]
 }

@@ -12,6 +12,7 @@ use rkt::{Request, State, delete, get, post};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
+use crate::api::PermissionRole;
 
 fn generate_session_token() -> String {
     let mut key = [0u8; 32];
@@ -318,6 +319,27 @@ pub async fn logout(user: AuthUser, pool: &State<PgPool>, cookies: &CookieJar<'_
         .await
         .map_err(|e| ApiResponse::fail(Status::InternalServerError, "database error", Some(&e)))?;
     Ok(ApiResponse::success(()))
+}
+
+#[derive(Serialize)]
+pub struct UserGroupResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub public: bool,
+    pub permissions: PermissionRole,
+}
+
+#[get("/user/groups")]
+pub async fn get_groups(auth: AuthUser, pool: &State<PgPool>) -> ApiResult<Vec<UserGroupResponse>> {
+    let groups = sqlx::query_as!(
+        UserGroupResponse,
+        r#"SELECT g.id, g.name, g.public, ug.permissions as "permissions: PermissionRole" FROM groups g INNER JOIN user_group ug ON ug.group_id = g.id WHERE ug.user_id = $1"#,
+        auth.id
+    )
+        .fetch_all(pool.inner())
+        .await
+        .map_err(|e| ApiResponse::fail(Status::InternalServerError, "database error", Some(&e)))?;
+    Ok(ApiResponse::success(groups))
 }
 
 #[derive(Clone)]
