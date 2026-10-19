@@ -1,5 +1,5 @@
 use crate::COOKIE_SECURITY;
-use crate::password::verify;
+use crate::password::{hash, verify};
 use crate::util::{ApiResponse, ApiResult, GuardErrorMessage};
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
@@ -101,6 +101,163 @@ pub async fn login(
         id: user.id,
         username: user.username,
         admin: user.admin,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct RegisterRequest {
+    pub login: String,
+    pub username: String,
+    pub password: String,
+    pub invite: String,
+}
+
+#[post("/user/register", data = "<data>")]
+pub async fn register(
+    pool: &State<PgPool>,
+    cookies: &CookieJar<'_>,
+    data: Json<RegisterRequest>,
+) -> ApiResult<LoginResponse> {
+    let login = data.login.trim();
+    if login.len() < 3 || login.len() > 32 {
+        return Err(ApiResponse::no_success(
+            Status::BadRequest,
+            "login must be between 3 and 32 characters",
+        ));
+    }
+    if !login
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    {
+        return Err(ApiResponse::no_success(
+            Status::BadRequest,
+            "login can only contain lowercase letters and numbers",
+        ));
+    }
+
+    let username = data.username.trim();
+    if username.len() < 2 || username.len() > 50 {
+        return Err(ApiResponse::no_success(
+            Status::BadRequest,
+            "username must be between 2 and 50 characters",
+        ));
+    }
+
+    let password = &data.password;
+    if password.len() < 8 || password.len() > 64 {
+        return Err(ApiResponse::no_success(
+            Status::BadRequest,
+            "password must be between 8 and 64 characters",
+        ));
+    }
+    let has_alphabetic = password.chars().any(|c| c.is_ascii_alphabetic());
+    let has_digit = password.chars().any(|c| c.is_ascii_digit());
+    if !(has_alphabetic && has_digit) {
+        return Err(ApiResponse::no_success(
+            Status::BadRequest,
+            "password must contain at least one letter and one number",
+        ));
+    }
+
+    let mut tx =
+        pool.inner().begin().await.map_err(|e| {
+            ApiResponse::fail(Status::InternalServerError, "database error", Some(&e))
+        })?;
+
+    let invite_record = sqlx::query!(
+        "SELECT id FROM invite_codes WHERE code = $1 AND used_by IS NULL FOR UPDATE",
+        data.invite
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| ApiResponse::fail(Status::InternalServerError, "database error", Some(&e)))?;
+
+    let invite_id = match invite_record {
+        Some(record) => record.id,
+        None => {
+            return Err(ApiResponse::no_success(
+                Status::BadRequest,
+                "invalid or already used invite code",
+            ));
+        }
+    };
+
+    let user_exists =
+        sqlx::query_scalar!("SELECT EXISTS(SELECT 1 FROM users WHERE login = $1)", login)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap_or(Some(false))
+            .unwrap_or(false);
+
+    if user_exists {
+        return Err(ApiResponse::no_success(
+            Status::Conflict,
+            "login is already taken",
+        ));
+    }
+
+    let hashed_password = hash(password.clone()).await.map_err(|e| {
+        ApiResponse::fail(
+            Status::InternalServerError,
+            "internal server error",
+            e.source(),
+        )
+    })?;
+
+    let new_user_id = sqlx::query_scalar!(
+        r#"
+        INSERT INTO users (login, username, password, admin)
+        VALUES ($1, $2, $3, false)
+        RETURNING id
+        "#,
+        login,
+        username,
+        hashed_password
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| ApiResponse::fail(Status::InternalServerError, "database error", Some(&e)))?;
+
+    sqlx::query!(
+        "UPDATE invite_codes SET used_by = $1 WHERE id = $2",
+        new_user_id,
+        invite_id
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiResponse::fail(Status::InternalServerError, "database error", Some(&e)))?;
+
+    let token = generate_session_token();
+
+    sqlx::query!(
+        r#"
+        INSERT INTO sessions (user_id, token, expires_at)
+        VALUES ($1, $2, NOW() + INTERVAL '30 days')
+        "#,
+        new_user_id,
+        token
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiResponse::fail(Status::InternalServerError, "database error", Some(&e)))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| ApiResponse::fail(Status::InternalServerError, "database error", Some(&e)))?;
+
+    cookies.add(
+        Cookie::build(("session_token", token.clone()))
+            .http_only(true)
+            .secure(COOKIE_SECURITY)
+            .same_site(SameSite::Lax)
+            .build(),
+    );
+
+    Ok(ApiResponse::success(LoginResponse {
+        token,
+        id: new_user_id,
+        username: username.to_string(),
+        admin: false,
     }))
 }
 

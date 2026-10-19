@@ -4,10 +4,10 @@ mod password;
 mod threads;
 mod util;
 
-use crate::util::{connect_db, options_handler, ApiResponse, Cors, GuardErrorMessage};
-use rkt::{catch, launch, Request};
+use crate::util::{ApiResponse, Cors, GuardErrorMessage, connect_db, options_handler};
 use rkt::http::Status;
 use rkt::serde::json::Json;
+use rkt::{Request, catch, launch};
 
 // easy access to test api with cookies
 #[cfg(debug_assertions)]
@@ -28,7 +28,14 @@ async fn rocket() -> _ {
     rkt::build()
         .manage(pool)
         .attach(Cors::new())
-        .register("/", rkt::catchers![unauthorized_catcher])
+        .register(
+            "/",
+            rkt::catchers![
+                unauthorized_catcher,
+                forbidden_catcher,
+                unprocessable_catcher
+            ],
+        )
         .mount("/", rkt::routes![options_handler])
         .mount("/v1", api::v1::routes())
 }
@@ -37,4 +44,16 @@ async fn rocket() -> _ {
 pub fn unauthorized_catcher(req: &Request) -> Json<ApiResponse> {
     let custom_error = req.local_cache(|| GuardErrorMessage("Unauthorized access".to_string()));
     ApiResponse::no_success(Status::Unauthorized, custom_error.0.clone()).1
+}
+
+#[catch(403)]
+pub fn forbidden_catcher(req: &Request) -> Json<ApiResponse> {
+    let custom_error = req.local_cache(|| GuardErrorMessage("Access forbidden".to_string()));
+    ApiResponse::no_success(Status::Forbidden, custom_error.0.clone()).1
+}
+
+#[catch(422)]
+pub fn unprocessable_catcher(req: &Request) -> Json<ApiResponse> {
+    let custom_error = req.local_cache(|| GuardErrorMessage("Unprocessable entity".to_string()));
+    ApiResponse::no_success(Status::UnprocessableEntity, custom_error.0.clone()).1
 }
