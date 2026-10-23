@@ -1,11 +1,9 @@
 mod admin;
 mod group;
+mod task;
 mod user;
 
-use rkt::serde::json::Json;
-use rkt::{Route, State, post};
-use serde::Deserialize;
-use sqlx::PgPool;
+use rkt::Route;
 
 pub fn routes() -> Vec<Route> {
     rkt::routes![
@@ -19,27 +17,14 @@ pub fn routes() -> Vec<Route> {
         group::delete_group,
         group::join_group,
         group::add_to_group,
+        task::create_task,
+        task::delete_task,
+        task::get_own_tasks,
+        task::get_my_tasks,
+        task::get_group_tasks,
         admin::get_users,
         admin::delete_user,
         admin::create_invite,
         admin::get_groups,
-        create_task
     ]
-}
-
-#[derive(Deserialize)]
-struct CreateTaskPayload {
-    title: String,
-    desc: Option<String>,
-}
-
-#[post("/create", data = "<data>")]
-async fn create_task(pool: &State<PgPool>, data: Json<CreateTaskPayload>) -> String {
-    let stri: String = sqlx::query_scalar("SELECT 'hello world from pg'")
-        .fetch_one(pool.inner())
-        .await
-        .unwrap();
-
-    let response_title = format!("{} {}", stri, data.title);
-    response_title
 }

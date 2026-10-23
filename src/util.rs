@@ -34,7 +34,15 @@ pub struct ApiResponse<T = ()> {
     pub error: Option<ApiError>,
 }
 
+impl ApiResponse<()> {
+    // replace E with ! when it stabilizes
+    pub fn ok<E>() -> Result<Json<Self>, E> {
+        Ok(Self::success(()))
+    }
+}
+
 impl<T> ApiResponse<T> {
+
     pub fn success(data: T) -> Json<Self> {
         Json(Self {
             success: true,
@@ -58,7 +66,7 @@ impl<T> ApiResponse<T> {
     }
 
     #[track_caller]
-    pub fn fail(status: Status, message: &str, err: Option<&dyn Error>) -> (Status, Json<Self>) {
+    pub fn fail(status: Status, message: impl ToString, err: Option<&dyn Error>) -> (Status, Json<Self>) {
         let loc = Location::caller();
         let err_id = Uuid::now_v7();
 
@@ -69,7 +77,7 @@ impl<T> ApiResponse<T> {
                 loc.file(),
                 loc.line(),
                 loc.column(),
-                message,
+                message.to_string(),
                 e
             );
         } else {
@@ -79,7 +87,7 @@ impl<T> ApiResponse<T> {
                 loc.file(),
                 loc.line(),
                 loc.column(),
-                message
+                message.to_string()
             );
         }
 

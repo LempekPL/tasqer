@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 use crate::api::PermissionRole;
+// TODO: make "deleted" user be "deleted" and not deleted 👍
 
 fn generate_session_token() -> String {
     let mut key = [0u8; 32];

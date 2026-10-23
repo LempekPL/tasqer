@@ -1581,6 +1581,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ubyte",
+ "uuid",
  "version_check",
  "yansi",
 ]
@@ -1621,6 +1622,7 @@ dependencies = [
  "time",
  "tinyvec",
  "uncased",
+ "uuid",
 ]
 
 [[package]]
